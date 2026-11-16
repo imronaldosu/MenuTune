@@ -1,0 +1,14 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"win": "2.2081"
+	},
+	"version": "v0.1.0",
+	"id": "local.menutune",
+	"name": "MenuTune",
+	"developer": "Arsharx7",
+	"description": "Replace the main menu music with any song from your Saved Songs collection. Pick a song, search your library, or hit Default to bring back the vanilla menu music - all from a button on the main menu. By Arsharx7.",
+	"dependencies": {
+		"geode.node-ids": ">=v1.23.3"
+	}
+}
