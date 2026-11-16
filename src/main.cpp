@@ -5,6 +5,7 @@
  * Private local use only. Not for submission to the Geode index.
  */
 #include <Geode/Geode.hpp>
+#include <Geode/modify/AppDelegate.hpp>
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/ui/BasedButtonSprite.hpp>
 #include <Geode/ui/ListView.hpp>
@@ -361,14 +362,33 @@ class $modify(MenuTuneMenuLayer, MenuLayer) {
             }
             // Same construction as Geode's own bottom-menu button: a green
             // circle base sized exactly like the vanilla MenuLayer buttons
-            // (MediumAlt = "the bottom buttons in MenuLayer"), with the note
-            // icon tinted to the gold used by the sibling icons.
-            if (auto spr = CircleButtonSprite::createWithSpriteFrameName(
-                "GJ_noteIcon_001.png", 1.f, CircleBaseColor::Green, CircleBaseSize::MediumAlt
-            )) {
+            // (MediumAlt = "the bottom buttons in MenuLayer"). The icon is our
+            // bundled note recoloured with the gold palette sampled from GD's
+            // own bottom-row glyphs, at 0.85 scale so it sits inside the ring
+            // like its siblings instead of overflowing it.
+            CircleButtonSprite* spr = CircleButtonSprite::createWithSprite(
+                "note_gold.png"_spr, 0.85f, CircleBaseColor::Green, CircleBaseSize::MediumAlt
+            );
+            // Geode substitutes a magenta checkerboard for missing files
+            // instead of returning null, so check the icon explicitly.
+            if (spr) {
                 if (auto top = typeinfo_cast<cocos2d::CCSprite*>(spr->getTopNode())) {
-                    top->setColor(ccc3(255, 240, 0));
+                    if (top->isUsingFallback()) spr = nullptr;
                 }
+            }
+            if (!spr) {
+                log::warn("MenuTune: bundled note_gold.png missing, falling back to tinted GJ_noteIcon_001");
+                if (auto tinted = CircleButtonSprite::createWithSpriteFrameName(
+                    "GJ_noteIcon_001.png", 0.85f, CircleBaseColor::Green, CircleBaseSize::MediumAlt
+                )) {
+                    auto top = typeinfo_cast<cocos2d::CCSprite*>(tinted->getTopNode());
+                    if (top && !top->isUsingFallback()) {
+                        top->setColor(ccc3(255, 240, 0));
+                        spr = tinted;
+                    }
+                }
+            }
+            if (spr) {
                 auto button = CCMenuItemSpriteExtra::create(
                     spr, this, menu_selector(MenuTuneMenuLayer::onMenuTune)
                 );
@@ -390,5 +410,54 @@ class $modify(MenuTuneMenuLayer, MenuLayer) {
         if (auto popup = MenuTunePopup::create()) {
             popup->show();
         }
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Pause GD's audio while the game doesn't have focus, so the menu song (or
+// anything else) doesn't keep playing over other applications when you
+// alt-tab away.
+//
+// applicationWillResignActive / applicationWillBecomeActive are RobTop's own
+// additions to cocos2d's CCApplicationProtocol (see that header) and are fired
+// on Windows focus changes; the Background/Foreground pair covers minimising.
+// pauseAllAudio/resumeAllAudio are guarded by GD's own m_allAudioPaused flag,
+// and we only resume if we were the ones who paused - so GD's own audio state
+// is never disturbed.
+// ---------------------------------------------------------------------------
+namespace {
+    bool g_audioPausedByMenuTune = false;
+
+    void pauseOnFocusLoss() {
+        auto engine = FMODAudioEngine::get();
+        if (engine && !engine->m_allAudioPaused) {
+            engine->pauseAllAudio();
+            g_audioPausedByMenuTune = true;
+        }
+    }
+    void resumeOnFocusGain() {
+        if (g_audioPausedByMenuTune) {
+            g_audioPausedByMenuTune = false;
+            if (auto engine = FMODAudioEngine::get()) engine->resumeAllAudio();
+        }
+    }
+}
+
+class $modify(MenuTuneAppDelegate, AppDelegate) {
+    void applicationWillResignActive() {
+        AppDelegate::applicationWillResignActive();
+        pauseOnFocusLoss();
+    }
+    void applicationDidEnterBackground() {
+        AppDelegate::applicationDidEnterBackground();
+        pauseOnFocusLoss();
+    }
+    void applicationWillBecomeActive() {
+        AppDelegate::applicationWillBecomeActive();
+        resumeOnFocusGain();
+    }
+    void applicationWillEnterForeground() {
+        AppDelegate::applicationWillEnterForeground();
+        resumeOnFocusGain();
     }
 };
